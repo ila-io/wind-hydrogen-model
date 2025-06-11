@@ -68,8 +68,8 @@ figure; %[output:566f4282]
 hold on %[output:566f4282]
 plot(powerDates, powerConsumed_kW) %[output:566f4282]
 xlabel("date") %[output:566f4282]
-ylabel("total power consumed (kWh)") %[output:566f4282]
-title("Total Power Consumed During 2025"); %[output:566f4282]
+ylabel("power consumed (kW)") %[output:566f4282]
+title("Instantatenous Power Consumed During 2025"); %[output:566f4282]
 hold off %[output:566f4282]
 %%
 %[text] ## Consumption Energy Graph
