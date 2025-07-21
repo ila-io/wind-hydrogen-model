@@ -409,6 +409,13 @@ export default function App() {
               <div>Active Turbines: {turbinesUsed.toFixed(1)}</div>
               <div>Net Power: {surplus > 0 ? '+' : ''}{surplus.toFixed(1)} kW</div>
             </div>
+            <div className="bg-gray-50 p-3 rounded col-span-2">
+              <h3 className="font-semibold mb-2">Cumulative Imported Hydrogen</h3>
+              <div>
+                {convertHydrogen(hydrogenImported, hydrogenUnit).toFixed(hydrogenUnit === 'mol' ? 0 : 2)} {hydrogenUnit}
+              </div>
+            </div>
+
           </div>
         </>
       )}
