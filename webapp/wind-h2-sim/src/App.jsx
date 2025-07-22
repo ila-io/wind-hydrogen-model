@@ -3,18 +3,15 @@ import Papa from "papaparse";
 import { Wind, Zap, Truck, Lightbulb } from "lucide-react";
 
 // Function to simulate the entire timespan and find maximum values
-const simulateEntireTimespan = (data, baseTurbines, caseMultiplier, electrolyzerEfficiency = 0.75, fuelCellEfficiency = 0.55) => {
+const simulateEntireTimespan = (data, turbineCount, electrolyzerEfficiency = 0.75, fuelCellEfficiency = 0.55) => {
   let storage = 0;
   let maxStorage = 0;
   let maxImportRate = 0;
   let totalImported = 0;
 
-  const multiplier = (11 - caseMultiplier) / 10;
-  const turbinesUsed = baseTurbines * multiplier;
-
   for (let i = 0; i < data.length; i++) {
     const current = data[i];
-    const adjustedSupplied = current.p_supplied_kw * turbinesUsed;
+    const adjustedSupplied = current.p_supplied_kw * turbineCount;
     const surplus = adjustedSupplied - current.p_consumed_kw;
     
     let importNeeded = 0;
@@ -151,6 +148,8 @@ export default function App() {
   const [storageKWh, setStorageKWh] = useState(0);
   const [caseIndex, setCaseIndex] = useState(1);
   const [turbinesInCase1, setTurbinesInCase1] = useState(1);
+  const [customTurbineInput, setCustomTurbineInput] = useState(false);
+  const [customTurbines, setCustomTurbines] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hydrogenUnit, setHydrogenUnit] = useState('MWh');
   const [hydrogenImported, setHydrogenImported] = useState(0);
@@ -162,6 +161,16 @@ export default function App() {
   // Conversion factors
   const hydrogenEnergyDensity = 33.33; // kWh/kg
   const hydrogenMolarMass = 2.016; // g/mol
+
+  // Calculate current turbine count
+  const getCurrentTurbineCount = () => {
+    if (customTurbineInput) {
+      return customTurbines;
+    } else {
+      const multiplier = (11 - caseIndex) / 10;
+      return turbinesInCase1 * multiplier;
+    }
+  };
 
   const processData = (results) => {
     const parsed = results.data.filter(
@@ -182,9 +191,11 @@ export default function App() {
       ...parsed.map((d) => Math.abs(d.p_supplied_kw * turbinesNeeded - d.p_consumed_kw))
     );
 
-    const simulationResults = simulateEntireTimespan(parsed, turbinesNeeded, 1, electrolyzerEfficiency, fuelCellEfficiency);
+    // Calculate initial simulation results with case 1 turbines
+    const simulationResults = simulateEntireTimespan(parsed, turbinesNeeded, electrolyzerEfficiency, fuelCellEfficiency);
     
     setTurbinesInCase1(turbinesNeeded);
+    setCustomTurbines(turbinesNeeded); // Initialize custom turbines to case 1 value
     setMaxValues({ 
       supplied: maxSupplied * turbinesNeeded,
       consumed: maxConsumed, 
@@ -235,16 +246,27 @@ export default function App() {
     loadDefaultData();
   }, []);
 
+  // Recalculate max values when turbine configuration changes
   useEffect(() => {
     if (data.length === 0 || turbinesInCase1 === 0) return;
+
+    const currentTurbineCount = getCurrentTurbineCount();
+    const simulationResults = simulateEntireTimespan(data, currentTurbineCount, electrolyzerEfficiency, fuelCellEfficiency);
     
-    const simulationResults = simulateEntireTimespan(data, turbinesInCase1, caseIndex, electrolyzerEfficiency, fuelCellEfficiency);
+    // Calculate new max values based on current turbine count
+    const maxSupplied = Math.max(...data.map((d) => d.p_supplied_kw * currentTurbineCount));
+    const maxSurplus = Math.max(
+      ...data.map((d) => Math.abs(d.p_supplied_kw * currentTurbineCount - d.p_consumed_kw))
+    );
+
     setMaxValues(prev => ({
       ...prev,
+      supplied: maxSupplied,
+      surplus: maxSurplus,
       hydrogenStorage: simulationResults.maxStorage,
       hydrogenImport: simulationResults.maxImportRate
     }));
-  }, [caseIndex, data, turbinesInCase1]);
+  }, [caseIndex, data, turbinesInCase1, customTurbineInput, customTurbines]);
 
   const resetSimulation = () => {
     setCurrentIndex(0);
@@ -266,8 +288,7 @@ export default function App() {
         }
 
         const current = data[nextIndex];
-        const multiplier = (11 - caseIndex) / 10;
-        const turbinesUsed = turbinesInCase1 * multiplier;
+        const turbinesUsed = getCurrentTurbineCount();
         const adjustedSupplied = current.p_supplied_kw * turbinesUsed;
         const surplus = adjustedSupplied - current.p_consumed_kw;
 
@@ -277,11 +298,13 @@ export default function App() {
           
           if (surplus > 0) {
             newStorage = prevStorage + surplus * electrolyzerEfficiency;
+            setCurrentImportRate(0);
           } else if (surplus < 0) {
             const required = Math.abs(surplus) / fuelCellEfficiency;
             
             if (prevStorage >= required) {
               newStorage = prevStorage - required;
+              setCurrentImportRate(0);
             } else {
               const shortfall = required - prevStorage;
               importNeeded = shortfall;
@@ -294,10 +317,6 @@ export default function App() {
             setCurrentImportRate(0);
           }
           
-          if (surplus >= 0) {
-            setCurrentImportRate(0);
-          }
-          
           return newStorage;
         });
 
@@ -306,7 +325,7 @@ export default function App() {
     }, 250);
 
     return () => clearInterval(interval);
-  }, [data, caseIndex, isPlaying, turbinesInCase1]);
+  }, [data, caseIndex, isPlaying, turbinesInCase1, customTurbineInput, customTurbines]);
 
   const convertHydrogen = (kWh, unit) => {
     const mWh = kWh / 1000; // Convert to MWh first
@@ -335,8 +354,7 @@ export default function App() {
   };
 
   const current = data[currentIndex] || {};
-  const multiplier = (11 - caseIndex) / 10;
-  const turbinesUsed = turbinesInCase1 * multiplier;
+  const turbinesUsed = getCurrentTurbineCount();
   const adjustedSupplied = current.p_supplied_kw ? current.p_supplied_kw * turbinesUsed : 0;
   const surplus = adjustedSupplied - (current.p_consumed_kw || 0);
 
@@ -391,20 +409,49 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <label htmlFor="caseSlider" className="font-semibold whitespace-nowrap">
-                Case {caseIndex}:
-              </label>
-              <input
-                id="caseSlider"
-                type="range"
-                min="1"
-                max="11"
-                value={caseIndex}
-                onChange={(e) => setCaseIndex(Number(e.target.value))}
-                className="flex-grow"
-              />
-              <span className="whitespace-nowrap">{Math.round(turbinesUsed)} turbines</span>
+            <div className="flex items-center space-x-4 flex-wrap">
+              <div className="flex items-center space-x-2">
+                <label className="font-semibold">Custom Turbines:</label>
+                <input
+                  type="checkbox"
+                  checked={customTurbineInput}
+                  onChange={() => setCustomTurbineInput(!customTurbineInput)}
+                />
+              </div>
+
+              {customTurbineInput ? (
+                <div className="flex items-center space-x-2">
+                  <label htmlFor="customTurbines" className="font-semibold"># Turbines:</label>
+                  <input
+                    type="number"
+                    id="customTurbines"
+                    value={customTurbines}
+                    min="1"
+                    step="1"
+                    onChange={(e) => setCustomTurbines(Number(e.target.value))}
+                    className="border px-2 py-1 rounded w-20"
+                  />
+                </div>
+              ) : (
+                <>
+                  <label htmlFor="caseSlider" className="font-semibold whitespace-nowrap">
+                    Case {caseIndex}:
+                  </label>
+                  <input
+                    id="caseSlider"
+                    type="range"
+                    min="1"
+                    max="11"
+                    value={caseIndex}
+                    onChange={(e) => setCaseIndex(Number(e.target.value))}
+                    className="flex-grow max-w-xs"
+                  />
+                </>
+              )}
+
+              <span className="whitespace-nowrap font-semibold">
+                Active: {Math.round(turbinesUsed)} turbines
+              </span>
             </div>
 
             <div className="flex items-center space-x-4">
@@ -570,7 +617,7 @@ export default function App() {
             <div className="bg-gray-50 p-3 rounded">
               <h3 className="font-semibold mb-2">Current Status</h3>
               <div>Storage: {(storageKWh / 1000).toFixed(1)} MWh</div>
-              <div>Active Turbines: {turbinesUsed.toFixed(1)}</div>
+              <div>Active Turbines: {turbinesUsed.toFixed(1)} {customTurbineInput && "(Custom)"}</div>
               <div>Net Power: {surplus > 0 ? '+' : ''}{(surplus / 1000).toFixed(1)} MW</div>
             </div>
             <div className="bg-gray-50 p-3 rounded col-span-2">
@@ -584,16 +631,36 @@ export default function App() {
               <div>
                 <p>Graphs for historic data and proper system efficiency implementation under development.</p>
                 <p>Example data from the following:</p>
-                <a href="https://www.ercot.com/gridinfo/load/load_hist/index.html">ERCOT Hourly Load Data</a>
-                
-                <a href="https://www.ercot.com/gridinfo/load/load_hist/index.html">ERCOT Hourly Load Data</a>
+                <p>
+                  Hourly load data is sourced from the{" "}
+                  <a
+                    href="https://www.ercot.com/gridinfo/load/load_hist/index.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#1e90ff", textDecoration: "underline" }}
+                  >
+                    ERCOT archive
+                  </a>
+                  , using reduced SCENT data from January 1, 2025, to April 30, 2025.
+                </p>                
+
+                <p>
+                  Hourly wind data is obtained from Avenger Field Airport in Sweetwater, Texas, via the{" "}
+                  <a
+                    href="https://www.ncei.noaa.gov/maps/hourly/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#1e90ff", textDecoration: "underline" }}
+                  >
+                    NOAA Hourly Weather Database
+                  </a>
+                  , and is used to simulate conditions at the nearby Roscoe Wind Farm, which uses 1 MW Mitsubishi wind turbines.
+                </p>
               </div>
             </div>
           </div>
         </>
       )}
     </div>
-
-
   );
 }
