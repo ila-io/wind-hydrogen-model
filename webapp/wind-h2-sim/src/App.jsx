@@ -583,6 +583,10 @@ export default function App() {
               <h3 className="font-semibold mb-2">Info</h3>
               <div>
                 <p>Graphs for historic data and proper system efficiency implementation under development.</p>
+                <p>Example data from the following:</p>
+                <a href="https://www.ercot.com/gridinfo/load/load_hist/index.html">ERCOT Hourly Load Data</a>
+                
+                <a href="https://www.ercot.com/gridinfo/load/load_hist/index.html">ERCOT Hourly Load Data</a>
               </div>
             </div>
           </div>
