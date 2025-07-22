@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Papa from "papaparse";
+import { Wind, Zap, Truck, Lightbulb } from "lucide-react";
 
 // Function to simulate the entire timespan and find maximum values
 const simulateEntireTimespan = (data, baseTurbines, caseMultiplier, electrolyzerEfficiency = 0.75, fuelCellEfficiency = 0.55) => {
@@ -44,8 +45,41 @@ const simulateEntireTimespan = (data, baseTurbines, caseMultiplier, electrolyzer
   return { maxStorage, maxImportRate, totalImported };
 };
 
+// Animated Arrow Component
+function AnimatedArrow({ active, direction = "right", color = "blue", className = "" }) {
+  const arrowPath = direction === "right" 
+    ? "M2 12h16m-4-4l4 4-4 4" 
+    : direction === "down" 
+    ? "M12 2v16m4-4l-4 4-4-4"
+    : "M2 12h16m-4-4l4 4-4 4";
+
+  const colorMap = {
+    green: { stroke: active ? 'stroke-green-500' : 'stroke-gray-300', glow: 'drop-shadow-[0_0_6px_rgba(34,197,94,0.6)]' },
+    blue: { stroke: active ? 'stroke-blue-500' : 'stroke-gray-300', glow: 'drop-shadow-[0_0_6px_rgba(59,130,246,0.6)]' },
+    red: { stroke: active ? 'stroke-red-500' : 'stroke-gray-300', glow: 'drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]' },
+    orange: { stroke: active ? 'stroke-orange-500' : 'stroke-gray-300', glow: 'drop-shadow-[0_0_6px_rgba(249,115,22,0.6)]' }
+  };
+
+  const colors = colorMap[color] || colorMap.blue;
+
+  return (
+    <div className={`flex items-center justify-center ${className}`}>
+      <svg 
+        width="32" 
+        height="24" 
+        viewBox="0 0 24 24" 
+        className={`transition-all duration-500 ${colors.stroke} ${active ? `${colors.glow} opacity-100` : 'opacity-50'} ${active ? 'animate-pulse' : ''}`}
+        strokeWidth="3"
+        fill="none"
+      >
+        <path d={arrowPath} />
+      </svg>
+    </div>
+  );
+}
+
 // Bar Component
-function Bar({ label, value = 0, max = 1, color = "gray", midpoint = false }) {
+function Bar({ label, value = 0, max = 1, color = "gray", midpoint = false, position = "bottom" }) {
   const percent = Math.min(Math.abs(value / max) * 100, 100);
 
   const colorClasses = {
@@ -57,42 +91,55 @@ function Bar({ label, value = 0, max = 1, color = "gray", midpoint = false }) {
     gray: "bg-gray-500"
   };
 
+  const barElement = (
+    <div className="h-32 w-4 bg-gray-200 relative overflow-hidden rounded">
+      {midpoint ? (
+        <>
+          {/* Positive (upward) */}
+          {value > 0 && (
+            <div
+              className={`absolute bottom-1/2 w-full ${colorClasses[color]} transition-all duration-300 ease-out`}
+              style={{
+                height: `${percent / 2}%`,
+              }}
+            />
+          )}
+          {/* Negative (downward) */}
+          {value < 0 && (
+            <div
+              className={`absolute top-1/2 w-full ${colorClasses[color]} transition-all duration-300 ease-out`}
+              style={{
+                height: `${percent / 2}%`,
+              }}
+            />
+          )}
+          {/* Midpoint line */}
+          <div className="absolute top-1/2 left-0 w-full h-0.5 bg-black opacity-30" />
+        </>
+      ) : (
+        <div
+          className={`absolute bottom-0 w-full ${colorClasses[color]} transition-all duration-300 ease-out`}
+          style={{
+            height: `${percent}%`,
+          }}
+        />
+      )}
+    </div>
+  );
+
   return (
-    <div className="flex flex-col items-center w-24 text-sm">
-      <div className="h-48 w-6 bg-gray-200 relative overflow-hidden rounded">
-        {midpoint ? (
-          <>
-            {/* Positive (upward) */}
-            {value > 0 && (
-              <div
-                className={`absolute bottom-1/2 w-full ${colorClasses[color]} transition-all duration-300 ease-out`}
-                style={{
-                  height: `${percent / 2}%`,
-                }}
-              />
-            )}
-            {/* Negative (downward) */}
-            {value < 0 && (
-              <div
-                className={`absolute top-1/2 w-full ${colorClasses[color]} transition-all duration-300 ease-out`}
-                style={{
-                  height: `${percent / 2}%`,
-                }}
-              />
-            )}
-            {/* Midpoint line */}
-            <div className="absolute top-1/2 left-0 w-full h-0.5 bg-black opacity-30" />
-          </>
-        ) : (
-          <div
-            className={`absolute bottom-0 w-full ${colorClasses[color]} transition-all duration-300 ease-out`}
-            style={{
-              height: `${percent}%`,
-            }}
-          />
-        )}
-      </div>
-      <div className="text-center mt-2 whitespace-pre-wrap text-xs transition-opacity duration-300">{label}</div>
+    <div className="flex flex-col items-center text-xs space-y-2 w-20">
+      {position === "top" && (
+        <div className="text-center min-h-[3rem] flex items-end justify-center w-full">
+          <div className="leading-tight">{label}</div>
+        </div>
+      )}
+      <div className="flex justify-center">{barElement}</div>
+      {position === "bottom" && (
+        <div className="text-center min-h-[3rem] flex items-start justify-center w-full">
+          <div className="leading-tight">{label}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -105,16 +152,54 @@ export default function App() {
   const [caseIndex, setCaseIndex] = useState(1);
   const [turbinesInCase1, setTurbinesInCase1] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [hydrogenUnit, setHydrogenUnit] = useState('kWh'); // 'kWh', 'kg', 'mol'
-  const [hydrogenImported, setHydrogenImported] = useState(0); // Total hydrogen imported
-  const [currentImportRate, setCurrentImportRate] = useState(0); // Current import rate
+  const [hydrogenUnit, setHydrogenUnit] = useState('MWh');
+  const [hydrogenImported, setHydrogenImported] = useState(0);
+  const [currentImportRate, setCurrentImportRate] = useState(0);
 
   const electrolyzerEfficiency = 0.75;
   const fuelCellEfficiency = 0.55;
   
-  // Conversion factors (approximate)
+  // Conversion factors
   const hydrogenEnergyDensity = 33.33; // kWh/kg
   const hydrogenMolarMass = 2.016; // g/mol
+
+  const processData = (results) => {
+    const parsed = results.data.filter(
+      (row) => row.p_supplied_kw !== undefined && row.p_consumed_kw !== undefined
+    );
+
+    if (parsed.length === 0) {
+      alert("No valid data found in CSV");
+      return;
+    }
+
+    const maxConsumed = Math.max(...parsed.map((d) => d.p_consumed_kw));
+    const maxSupplied = Math.max(...parsed.map((d) => d.p_supplied_kw));
+    const avgWindOutput = parsed.reduce((sum, d) => sum + d.p_supplied_kw, 0) / parsed.length;
+    
+    const turbinesNeeded = Math.ceil(maxConsumed / avgWindOutput);
+    const maxSurplus = Math.max(
+      ...parsed.map((d) => Math.abs(d.p_supplied_kw * turbinesNeeded - d.p_consumed_kw))
+    );
+
+    const simulationResults = simulateEntireTimespan(parsed, turbinesNeeded, 1, electrolyzerEfficiency, fuelCellEfficiency);
+    
+    setTurbinesInCase1(turbinesNeeded);
+    setMaxValues({ 
+      supplied: maxSupplied * turbinesNeeded,
+      consumed: maxConsumed, 
+      surplus: maxSurplus,
+      hydrogenStorage: simulationResults.maxStorage,
+      hydrogenImport: simulationResults.maxImportRate
+    });
+    
+    setData(parsed);
+    setCurrentIndex(0);
+    setStorageKWh(0);
+    setHydrogenImported(0);
+    setCurrentImportRate(0);
+    setIsPlaying(false);
+  };
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -124,53 +209,32 @@ export default function App() {
       header: true,
       dynamicTyping: true,
       skipEmptyLines: true,
-      complete: (results) => {
-        const parsed = results.data.filter(
-          (row) => row.p_supplied_kw !== undefined && row.p_consumed_kw !== undefined
-        );
-
-        if (parsed.length === 0) {
-          alert("No valid data found in CSV");
-          return;
-        }
-
-        const maxConsumed = Math.max(...parsed.map((d) => d.p_consumed_kw));
-        const maxSupplied = Math.max(...parsed.map((d) => d.p_supplied_kw));
-        const avgWindOutput = parsed.reduce((sum, d) => sum + d.p_supplied_kw, 0) / parsed.length;
-        
-        // Calculate turbines needed to meet peak demand on average wind
-        const turbinesNeeded = Math.ceil(maxConsumed / avgWindOutput);
-
-        // Calculate the maximum surplus across all possible scenarios
-        const maxSurplus = Math.max(
-          ...parsed.map((d) => Math.abs(d.p_supplied_kw * turbinesNeeded - d.p_consumed_kw))
-        );
-
-        // Pre-calculate maximum hydrogen storage and import for this configuration
-        const simulationResults = simulateEntireTimespan(parsed, turbinesNeeded, 1, electrolyzerEfficiency, fuelCellEfficiency);
-        
-        setTurbinesInCase1(turbinesNeeded);
-        
-        // Set max values based on the maximum possible values across all cases
-        setMaxValues({ 
-          supplied: maxSupplied * turbinesNeeded, // Maximum possible supply
-          consumed: maxConsumed, 
-          surplus: maxSurplus,
-          hydrogenStorage: simulationResults.maxStorage,
-          hydrogenImport: simulationResults.maxImportRate
-        });
-        
-        setData(parsed);
-        setCurrentIndex(0);
-        setStorageKWh(0);
-        setHydrogenImported(0);
-        setCurrentImportRate(0);
-        setIsPlaying(false);
-      },
+      complete: processData,
     });
   };
 
-  // Recalculate max values when case changes
+  // Load default data on component mount
+  useEffect(() => {
+    const loadDefaultData = async () => {
+      try {
+        const response = await fetch('/data.csv');
+        if (response.ok) {
+          const csvText = await response.text();
+          Papa.parse(csvText, {
+            header: true,
+            dynamicTyping: true,
+            skipEmptyLines: true,
+            complete: processData,
+          });
+        }
+      } catch (error) {
+        console.log('No default data.csv found in public folder');
+      }
+    };
+
+    loadDefaultData();
+  }, []);
+
   useEffect(() => {
     if (data.length === 0 || turbinesInCase1 === 0) return;
     
@@ -212,31 +276,24 @@ export default function App() {
           let newStorage = prevStorage;
           
           if (surplus > 0) {
-            // Excess power goes to electrolyzer (with efficiency loss)
             newStorage = prevStorage + surplus * electrolyzerEfficiency;
           } else if (surplus < 0) {
-            // Need power from fuel cell (with efficiency loss)
             const required = Math.abs(surplus) / fuelCellEfficiency;
             
             if (prevStorage >= required) {
-              // Use stored hydrogen
               newStorage = prevStorage - required;
             } else {
-              // Not enough stored hydrogen, need to import
               const shortfall = required - prevStorage;
               importNeeded = shortfall;
-              newStorage = 0; // Storage depleted
+              newStorage = 0;
               
-              // Update imported hydrogen tracking
               setHydrogenImported(prev => prev + importNeeded);
               setCurrentImportRate(importNeeded);
             }
           } else {
-            // No surplus or deficit
             setCurrentImportRate(0);
           }
           
-          // Reset import rate if not importing this cycle
           if (surplus >= 0) {
             setCurrentImportRate(0);
           }
@@ -246,20 +303,21 @@ export default function App() {
 
         return nextIndex;
       });
-    }, 250); // interval time
+    }, 250);
 
     return () => clearInterval(interval);
   }, [data, caseIndex, isPlaying, turbinesInCase1]);
 
   const convertHydrogen = (kWh, unit) => {
+    const mWh = kWh / 1000; // Convert to MWh first
     switch (unit) {
       case 'kg':
         return kWh / hydrogenEnergyDensity;
       case 'mol':
         const kg = kWh / hydrogenEnergyDensity;
-        return (kg * 1000) / hydrogenMolarMass; // Convert to grams then to moles
+        return (kg * 1000) / hydrogenMolarMass;
       default:
-        return kWh;
+        return mWh;
     }
   };
 
@@ -282,8 +340,14 @@ export default function App() {
   const adjustedSupplied = current.p_supplied_kw ? current.p_supplied_kw * turbinesUsed : 0;
   const surplus = adjustedSupplied - (current.p_consumed_kw || 0);
 
+  // Flow states
+  const windToHydrogen = surplus > 0;
+  const hydrogenToLoad = surplus < 0 && storageKWh > 0;
+  const importToHydrogen = surplus < 0 && storageKWh <= 0;
+  const directWindToLoad = adjustedSupplied > 0 && (current.p_consumed_kw || 0) > 0;
+
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold text-center">Wind-Hydrogen System Simulation</h1>
       
       <div className="border-2 border-dashed border-gray-300 p-4 rounded-lg">
@@ -345,7 +409,7 @@ export default function App() {
 
             <div className="flex items-center space-x-4">
               <span className="font-semibold">Hydrogen Display:</span>
-              {['kWh', 'kg', 'mol'].map((unit) => (
+              {['MWh', 'kg', 'mol'].map((unit) => (
                 <label key={unit} className="flex items-center space-x-1">
                   <input
                     type="radio"
@@ -360,39 +424,139 @@ export default function App() {
             </div>
           </div>
 
-          {/* Visualization Bars */}
-          <div className="flex justify-center space-x-6 bg-white p-6 rounded-lg shadow">
-            <Bar
-              label={`Wind Supply\n${adjustedSupplied.toFixed(1)} kW`}
-              value={adjustedSupplied}
-              max={maxValues.supplied}
-              color="green"
-            />
-            <Bar
-              label={`Demand\n${(current.p_consumed_kw || 0).toFixed(1)} kW`}
-              value={current.p_consumed_kw || 0}
-              max={maxValues.consumed}
-              color="orange"
-            />
-            <Bar
-              label={`Surplus/Deficit\n${surplus.toFixed(1)} kW`}
-              value={surplus}
-              max={maxValues.surplus}
-              color="teal"
-              midpoint
-            />
-            <Bar
-              label={`H₂ Storage\n${getHydrogenDisplayValue()} ${hydrogenUnit}`}
-              value={convertHydrogen(storageKWh, hydrogenUnit)}
-              max={getHydrogenMaxValue()}
-              color="blue"
-            />
-            <Bar
-              label={`H₂ Import Rate\n${convertHydrogen(currentImportRate, hydrogenUnit).toFixed(hydrogenUnit === 'mol' ? 0 : 2)} ${hydrogenUnit}/hr`}
-              value={convertHydrogen(currentImportRate, hydrogenUnit)}
-              max={getImportMaxValue()}
-              color="red"
-            />
+          {/* Main System Diagram */}
+          <div className="bg-white p-8 rounded-lg shadow-lg">
+            {/* Import truck at top */}
+            <div className="flex justify-center mb-4">
+              <div className="flex flex-col items-center">
+                <Truck size={32} className={`transition-all duration-500 ${importToHydrogen ? 'text-red-500' : 'text-gray-400'}`} />
+                <AnimatedArrow active={importToHydrogen} direction="down" color="red" className="mt-1" />
+                <Bar
+                  label={`H₂ Import\n${convertHydrogen(currentImportRate, hydrogenUnit).toFixed(hydrogenUnit === 'mol' ? 0 : 2)} ${hydrogenUnit}/hr`}
+                  value={convertHydrogen(currentImportRate, hydrogenUnit)}
+                  max={getImportMaxValue()}
+                  color="red"
+                  position="bottom"
+                />
+              </div>
+            </div>
+
+            {/* Main flow diagram */}
+            <div className="flex items-center justify-center space-x-6">
+              
+              {/* Wind Generation */}
+              <div className="flex flex-col items-center space-y-3">
+                <Wind size={48} className="text-green-600" />
+                <Bar
+                  label={`${(adjustedSupplied / 1000).toFixed(1)} MW`}
+                  value={adjustedSupplied}
+                  max={maxValues.supplied}
+                  color="green"
+                  position="bottom"
+                />
+              </div>
+
+              {/* Arrow to Electrolyzer */}
+              <AnimatedArrow active={windToHydrogen} color="green" />
+
+              {/* Electrolyzer */}
+              <div className="flex flex-col items-center space-y-3">
+                <div className={`p-3 rounded-lg transition-all duration-500 ${
+                  windToHydrogen ? 'bg-green-200 shadow-lg shadow-green-300' : 'bg-gray-100'
+                }`}>
+                  <Zap size={32} className={`transition-all duration-500 ${
+                    windToHydrogen ? 'text-green-600' : 'text-gray-400'
+                  }`} />
+                </div>
+                <div className="text-xs text-center w-20">Electrolyzer</div>
+              </div>
+
+              {/* Arrow to Hydrogen Tank */}
+              <AnimatedArrow active={windToHydrogen} color="green" />
+
+              {/* Hydrogen System */}
+              <div className="flex flex-col items-center space-y-3">
+                <div className="w-12 h-16 bg-blue-100 border-2 border-blue-400 rounded-lg flex items-center justify-center">
+                  <span className="text-blue-600 font-bold text-xs">H₂</span>
+                </div>
+                <div className="flex space-x-2">
+                  <Bar
+                    label={`Surplus\n${(surplus / 1000).toFixed(1)} MW`}
+                    value={surplus}
+                    max={maxValues.surplus}
+                    color="teal"
+                    midpoint
+                    position="bottom"
+                  />
+                  <Bar
+                    label={`Storage\n${getHydrogenDisplayValue()} ${hydrogenUnit}`}
+                    value={convertHydrogen(storageKWh, hydrogenUnit)}
+                    max={getHydrogenMaxValue()}
+                    color="blue"
+                    position="bottom"
+                  />
+                </div>
+              </div>
+
+              {/* Arrow to Fuel Cell */}
+              <AnimatedArrow active={hydrogenToLoad} color="blue" />
+
+              {/* Fuel Cell */}
+              <div className="flex flex-col items-center space-y-3">
+                <div className={`p-3 rounded-lg transition-all duration-500 ${
+                  hydrogenToLoad ? 'bg-blue-200 shadow-lg shadow-blue-300' : 'bg-gray-100'
+                }`}>
+                  <Zap size={32} className={`transition-all duration-500 ${
+                    hydrogenToLoad ? 'text-blue-600' : 'text-gray-400'
+                  }`} />
+                </div>
+                <div className="text-xs text-center w-20">Fuel Cell</div>
+              </div>
+
+              {/* Arrow to Load */}
+              <AnimatedArrow active={hydrogenToLoad} color="orange" />
+
+              {/* Load */}
+              <div className="flex flex-col items-center space-y-3">
+                <Lightbulb size={48} className="text-yellow-500" />
+                <Bar
+                  label={`${((current.p_consumed_kw || 0) / 1000).toFixed(1)} MW`}
+                  value={current.p_consumed_kw || 0}
+                  max={maxValues.consumed}
+                  color="orange"
+                  position="bottom"
+                />
+              </div>
+            </div>
+
+            {/* Direct connection line with arrows */}
+            <div className="relative mt-8">
+              <div className="flex justify-center">
+                <div className="relative w-3/5">
+                  {/* Left arrow tail */}
+                  <div className="absolute -left-3 top-1/2 transform -translate-y-1/2">
+                    <svg width="16" height="16" viewBox="0 0 16 16" className={`transition-all duration-500 ${directWindToLoad ? 'text-orange-400' : 'text-gray-300'}`} fill="currentColor">
+                      <path d="M8 2l-2 2h1v8h2V4h1L8 2z"/>
+                    </svg>
+                  </div>
+                  
+                  {/* Main connection line */}
+                  <div className="h-1 bg-gray-300 rounded">
+                    <div className={`h-full rounded transition-all duration-500 ${directWindToLoad ? 'bg-orange-400 opacity-90' : 'bg-gray-300'}`}></div>
+                  </div>
+                  
+                  {/* Right arrow tail */}
+                  <div className="absolute -right-3 top-1/2 transform -translate-y-1/2">
+                    <svg width="16" height="16" viewBox="0 0 16 16" className={`transition-all duration-500 ${directWindToLoad ? 'text-orange-400' : 'text-gray-300'}`} fill="currentColor">
+                      <path d="M8 2l-2 2h1v8h2V4h1L8 2z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div className="text-center text-xs text-gray-500 mt-4">
+                Direct Wind → Load Connection
+              </div>
+            </div>
           </div>
 
           {/* System Info */}
@@ -405,9 +569,9 @@ export default function App() {
             </div>
             <div className="bg-gray-50 p-3 rounded">
               <h3 className="font-semibold mb-2">Current Status</h3>
-              <div>Storage: {storageKWh.toFixed(1)} kWh</div>
+              <div>Storage: {(storageKWh / 1000).toFixed(1)} MWh</div>
               <div>Active Turbines: {turbinesUsed.toFixed(1)}</div>
-              <div>Net Power: {surplus > 0 ? '+' : ''}{surplus.toFixed(1)} kW</div>
+              <div>Net Power: {surplus > 0 ? '+' : ''}{(surplus / 1000).toFixed(1)} MW</div>
             </div>
             <div className="bg-gray-50 p-3 rounded col-span-2">
               <h3 className="font-semibold mb-2">Cumulative Imported Hydrogen</h3>
@@ -415,10 +579,17 @@ export default function App() {
                 {convertHydrogen(hydrogenImported, hydrogenUnit).toFixed(hydrogenUnit === 'mol' ? 0 : 2)} {hydrogenUnit}
               </div>
             </div>
-
+            <div className="bg-gray-50 p-3 rounded col-span-2">
+              <h3 className="font-semibold mb-2">Info</h3>
+              <div>
+                <p>Graphs for historic data and proper system efficiency implementation under development.</p>
+              </div>
+            </div>
           </div>
         </>
       )}
     </div>
+
+
   );
 }
